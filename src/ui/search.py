@@ -166,7 +166,7 @@ class SearchWindow(QMainWindow):
         self.ssh_client = None
         self.file_worker = None
         
-        self.setWindowTitle("AGV Log File Viewer")
+        self.setWindowTitle("AGV 版本查詢工具")
         self.setGeometry(200, 200, 1000, 700)
         
         self.create_widgets()
@@ -181,14 +181,15 @@ class SearchWindow(QMainWindow):
         if self.ssh_client:
             self.ssh_client.close()
         
-        # 避免重新打開程式，直接關閉整個應用程式
-        import sys
-        if hasattr(self, 'login_window'):
-            self.login_window = None
-        
-        event.accept()
-        # 關閉整個應用程式
-        sys.exit(0)
+        # 檢查是否有login_window，如果有則不退出應用程式
+        if hasattr(self, 'login_window') and self.login_window:
+            # 如果是通過back_to_login創建的，保持login_window運行
+            event.accept()
+        else:
+            # 如果是直接關閉（點擊X），則退出整個應用程式
+            import sys
+            event.accept()
+            sys.exit(0)
     
     def create_widgets(self):
         central_widget = QWidget()
@@ -198,14 +199,14 @@ class SearchWindow(QMainWindow):
         central_widget.setLayout(main_layout)
         
         # 標題
-        title_label = QLabel("AGV Log File Viewer")
+        title_label = QLabel("AGV版本查詢工具")
         title_font = QFont("Arial", 16, QFont.Bold)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title_label)
         
         # 連線資訊
-        connection_info = "Connected to: {}@{}:{}".format(
+        connection_info = "ssh已連線到: {}@{}:{}".format(
             self.ssh_connection_info.get('username', ''),
             self.ssh_connection_info.get('ip', ''),
             self.ssh_connection_info.get('port', '')
@@ -215,8 +216,23 @@ class SearchWindow(QMainWindow):
         info_label.setStyleSheet("color: green; font-weight: bold;")
         main_layout.addWidget(info_label)
         
-        # 時間過濾區域
-        time_filter_group = QGroupBox("Time Filter")
+        # 簡潔的時間過濾區域
+        time_filter_group = QGroupBox("時間過濾")
+        time_filter_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 13px;
+                border: none;
+                margin-top: 8px;
+                padding-top: 8px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 20px;
+                padding: 0 8px 0 8px;
+                color: #2c3e50;
+            }
+        """)
         time_filter_layout = QGridLayout()
         time_filter_layout.setHorizontalSpacing(5)  # 減少水平間距
         time_filter_layout.setVerticalSpacing(10)   # 設置垂直間距
@@ -329,7 +345,7 @@ class SearchWindow(QMainWindow):
         time_filter_layout.addWidget(end_time_controls_widget, 1, 2, 1, 6)
         
         # 第三行：啟用時間過濾和快速設置按鈕
-        self.enable_time_filter = QCheckBox("Enable Time Filter")
+        self.enable_time_filter = QCheckBox("使用時間過濾進行篩選(未勾選為全部搜尋)")
         self.enable_time_filter.setChecked(True)
         self.enable_time_filter.toggled.connect(self.on_time_filter_toggled)
         time_filter_layout.addWidget(self.enable_time_filter, 2, 0, 1, 2)
@@ -337,12 +353,12 @@ class SearchWindow(QMainWindow):
         # 快捷按鈕布局
         button_container = QHBoxLayout()
         
-        self.last_hour_btn = QPushButton("Last Hour")
+        self.last_hour_btn = QPushButton("1小時前")
         self.last_hour_btn.clicked.connect(self.set_last_hour)
         self.last_hour_btn.setFixedSize(100, 30)
         button_container.addWidget(self.last_hour_btn)
         
-        self.last_day_btn = QPushButton("Last 24 Hours")
+        self.last_day_btn = QPushButton("24小時前")
         self.last_day_btn.clicked.connect(self.set_last_day)
         self.last_day_btn.setFixedSize(100, 30)
         button_container.addWidget(self.last_day_btn)
@@ -355,41 +371,131 @@ class SearchWindow(QMainWindow):
         
         main_layout.addWidget(time_filter_group)
         
-        # 控制按鈕
+        # 美化的控制按鈕
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(15)
         
-        self.scan_button = QPushButton("Scan Log Files")
+        self.scan_button = QPushButton("開始搜尋")
         self.scan_button.clicked.connect(self.scan_log_files)
+        self.scan_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f8f9fa;
+                border: 1px solid #ddd;
+                color: #495057;
+                padding: 10px 20px;
+                font-size: 13px;
+                border-radius: 4px;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+                border-color: #bbb;
+            }
+            QPushButton:pressed {
+                background-color: #dee2e6;
+            }
+            QPushButton:disabled {
+                background-color: #f8f9fa;
+                color: #adb5bd;
+                border-color: #e9ecef;
+            }
+        """)
         button_layout.addWidget(self.scan_button)
         
-        self.back_button = QPushButton("Back to Login")
+        self.back_button = QPushButton("回到ssh登入頁面")
         self.back_button.clicked.connect(self.back_to_login)
+        self.back_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f8f9fa;
+                border: 1px solid #ddd;
+                color: #495057;
+                padding: 10px 20px;
+                font-size: 13px;
+                border-radius: 4px;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+                border-color: #bbb;
+            }
+            QPushButton:pressed {
+                background-color: #dee2e6;
+            }
+        """)
         button_layout.addWidget(self.back_button)
         
         main_layout.addLayout(button_layout)
         
-        # 進度條
+        # 簡潔的進度條
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                text-align: center;
+                background-color: #f8f9fa;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: #6c757d;
+                border-radius: 3px;
+            }
+        """)
         main_layout.addWidget(self.progress_bar)
         
-        # 重啟次數顯示
+        # 簡潔的重啟次數顯示
         self.restart_count_label = QLabel("")
-        self.restart_count_label.setStyleSheet("color: red; font-weight: bold; font-size: 14px;")
+        self.restart_count_label.setStyleSheet("""
+            QLabel {
+                color: #dc3545;
+                font-weight: bold;
+                font-size: 14px;
+                padding: 8px;
+                background-color: #ffffff;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                margin: 5px;
+            }
+        """)
         self.restart_count_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(self.restart_count_label)
         
-        # 單一大的顯示區域
-        main_display_group = QGroupBox("Build Version 信息")
+        # 簡潔的顯示區域
+        main_display_group = QGroupBox("Agv版本訊息")
+        main_display_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 14px;
+                border: none;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 15px;
+                padding: 0 10px 0 10px;
+                color: #2c3e50;
+            }
+        """)
         main_display_layout = QVBoxLayout()
         
-        # 單一內容顯示區域
+        # 簡潔的內容顯示區域
         self.content_display = QTextEdit()
         self.content_display.setReadOnly(True)
-        self.content_display.setFont(QFont("Consolas", 10))
-        self.content_display.setStyleSheet("border: 1px solid #ccc; background-color: white; padding: 10px;")
+        self.content_display.setFont(QFont("Consolas", 11))
+        self.content_display.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background-color: #ffffff;
+                padding: 15px;
+                line-height: 1.4;
+            }
+        """)
         
         main_display_layout.addWidget(self.content_display)
+        main_display_layout.setContentsMargins(15, 15, 15, 15)
         main_display_group.setLayout(main_display_layout)
         
         main_layout.addWidget(main_display_group)
@@ -531,14 +637,20 @@ class SearchWindow(QMainWindow):
         # 按檔案時間排序日誌
         self.build_version_logs.sort(key=lambda x: x['file_time'])
         
-        # 準備顯示內容 - 每行顯示開機時間、版本號、版本時間
+        # 準備顯示內容 - 添加標題行和數據
         display_lines = []
         
+        # 添加表頭
+        header = "{:<20} {:<15} {:<15}".format("開機時間", "版本號", "版本時間")
+        display_lines.append(header)
+        display_lines.append("=" * 60)  # 分隔線
+        
+        # 添加數據行
         for log in self.build_version_logs:
-            line = "{}\t{}\t{}".format(
-                log['boot_time'],
-                log['version'], 
-                log['version_time']
+            line = "{:<20} {:<15} {:<15}".format(
+                log['boot_time'][:20],  # 限制長度避免格式錯亂
+                log['version'][:15],
+                log['version_time'][:15]
             )
             display_lines.append(line)
         
@@ -627,7 +739,7 @@ class SearchWindow(QMainWindow):
     
     def back_to_login(self):
         """返回登入頁面"""
-        # 清理資源並關閉程式
+        # 清理資源
         if self.file_worker and self.file_worker.isRunning():
             self.file_worker.terminate()
             self.file_worker.wait(3000)
@@ -635,5 +747,10 @@ class SearchWindow(QMainWindow):
         if self.ssh_client:
             self.ssh_client.close()
         
-        # 直接關閉窗口，不重新打開登入頁面
+        # 重新打開登入頁面
+        from .login import SSHConnectionApp
+        self.login_window = SSHConnectionApp()
+        self.login_window.show()
+        
+        # 關閉當前窗口
         self.close()

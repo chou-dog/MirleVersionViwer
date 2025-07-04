@@ -62,7 +62,7 @@ class SSHConnectionApp(QMainWindow):
         
         # 添加下拉式選單
         profile_layout = QHBoxLayout()
-        profile_label = QLabel("Saved Connections:")
+        profile_label = QLabel("快速選取:")
         profile_layout.addWidget(profile_label)
         
         self.profile_combo = QComboBox()
@@ -70,7 +70,7 @@ class SSHConnectionApp(QMainWindow):
         self.profile_combo.currentTextChanged.connect(self.on_profile_selected)
         profile_layout.addWidget(self.profile_combo)
         
-        self.delete_profile_button = QPushButton("Delete")
+        self.delete_profile_button = QPushButton("刪除")
         self.delete_profile_button.clicked.connect(self.delete_selected_profile)
         self.delete_profile_button.setEnabled(False)
         profile_layout.addWidget(self.delete_profile_button)
@@ -102,7 +102,7 @@ class SSHConnectionApp(QMainWindow):
         self.password_entry.setEchoMode(QLineEdit.Password)
         form_layout.addWidget(self.password_entry, 3, 1)
         
-        self.allow_no_password = QCheckBox("Allow connection without password (use SSH key)")
+        self.allow_no_password = QCheckBox("不須設定密碼進行登入")
         self.allow_no_password.stateChanged.connect(self.on_allow_no_password_changed)
         form_layout.addWidget(self.allow_no_password, 4, 0, 1, 2)
         
@@ -110,11 +110,11 @@ class SSHConnectionApp(QMainWindow):
         
         button_layout = QHBoxLayout()
         
-        self.connect_button = QPushButton("Connect")
+        self.connect_button = QPushButton("連線")
         self.connect_button.clicked.connect(self.connect_ssh)
         button_layout.addWidget(self.connect_button)
         
-        self.save_button = QPushButton("Save Config")
+        self.save_button = QPushButton("儲存至快速選取")
         self.save_button.clicked.connect(self.save_config)
         button_layout.addWidget(self.save_button)
         
@@ -161,7 +161,7 @@ class SSHConnectionApp(QMainWindow):
             return
             
         self.connect_button.setEnabled(False)
-        self.status_label.setText("Connecting...")
+        self.status_label.setText("連線中...")
         self.status_label.setStyleSheet("color: orange;")
         
         self.ssh_worker = SSHWorker(ip, port, username, password)
@@ -171,7 +171,7 @@ class SSHConnectionApp(QMainWindow):
         
     def connection_success(self):
         self.connect_button.setEnabled(True)
-        self.status_label.setText("Connected successfully!")
+        self.status_label.setText("連線成功!")
         self.status_label.setStyleSheet("color: green;")
         
         # 自動保存成功連線的配置
@@ -182,7 +182,7 @@ class SSHConnectionApp(QMainWindow):
         
     def connection_failed(self, error_message):
         self.connect_button.setEnabled(True)
-        self.status_label.setText("Connection failed")
+        self.status_label.setText("連線失敗")
         self.status_label.setStyleSheet("color: red;")
         QMessageBox.critical(self, "Connection Failed", "Failed to connect via SSH.\n\nError: {}".format(error_message))
     
@@ -202,7 +202,7 @@ class SSHConnectionApp(QMainWindow):
             port_int = int(port)
             if config_manager.save_config(ip, port_int, username, password, allow_no_password):
                 QMessageBox.information(self, "Success", "Configuration saved successfully!")
-                self.status_label.setText("Configuration saved")
+                self.status_label.setText("配置已儲存")
                 self.status_label.setStyleSheet("color: green;")
                 
                 # 刷新下拉式選單並選擇新保存的項目
@@ -240,7 +240,7 @@ class SSHConnectionApp(QMainWindow):
                 if index >= 0:
                     self.profile_combo.setCurrentIndex(index)
             
-            self.status_label.setText("Last configuration loaded")
+            self.status_label.setText("載入上次連線配置")
             self.status_label.setStyleSheet("color: blue;")
     
     def save_config_automatically(self):
@@ -296,7 +296,7 @@ class SSHConnectionApp(QMainWindow):
             # 觸發checkbox狀態變化
             self.on_allow_no_password_changed(Qt.Checked if config.get("allow_no_password", False) else Qt.Unchecked)
             
-            self.status_label.setText("Profile '{}' loaded".format(profile_name))
+            self.status_label.setText("載入 '{}' ".format(profile_name))
             self.status_label.setStyleSheet("color: blue;")
     
     def delete_selected_profile(self):
@@ -322,7 +322,7 @@ class SSHConnectionApp(QMainWindow):
                 self.allow_no_password.setChecked(False)
                 self.on_allow_no_password_changed(Qt.Unchecked)
                 
-                self.status_label.setText("Profile deleted")
+                self.status_label.setText("配置刪除")
                 self.status_label.setStyleSheet("color: orange;")
             else:
                 QMessageBox.critical(self, "Error", "Failed to delete profile")
