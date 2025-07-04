@@ -1,11 +1,11 @@
 try:
-    from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QMessageBox, QProgressBar, QDateEdit, QSpinBox, QGroupBox, QGridLayout, QCheckBox
+    from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QMessageBox, QProgressBar, QDateEdit, QComboBox, QGroupBox, QGridLayout, QCheckBox
     from PyQt5.QtCore import Qt, QThread, pyqtSignal, QDate
     from PyQt5.QtGui import QFont
     QT_AVAILABLE = True
 except ImportError:
     try:
-        from PySide2.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QMessageBox, QProgressBar, QDateEdit, QSpinBox, QGroupBox, QGridLayout, QCheckBox
+        from PySide2.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QMessageBox, QProgressBar, QDateEdit, QComboBox, QGroupBox, QGridLayout, QCheckBox
         from PySide2.QtCore import Qt, QThread, Signal as pyqtSignal, QDate
         from PySide2.QtGui import QFont
         QT_AVAILABLE = True
@@ -53,7 +53,7 @@ def parse_filename_datetime(filename):
 class FileReadWorker(QThread):
     """檔案讀取工作執行緒"""
     finished = pyqtSignal()
-    build_version_found = pyqtSignal(str, str, str)  # 檔案名, 檔案內容, build version
+    build_version_found = pyqtSignal(str, str, dict)  # 檔案名, 檔案內容, build version info
     error = pyqtSignal(str)
     progress = pyqtSignal(int, int)  # 當前進度, 總數
     restart_count = pyqtSignal(int)  # 重啟次數
@@ -130,8 +130,33 @@ class FileReadWorker(QThread):
         lines = content.split('\n')
         for line in lines:
             if 'build version' in line.lower():
-                return line.strip()
-        return "build version not found"
+                # 提取開機時間、版本號和版本時間
+                import re
+                
+                # 匹配時間格式 HH:MM:SS.mmm
+                time_match = re.search(r'(\d{2}:\d{2}:\d{2}\.\d{3})', line)
+                time_str = time_match.group(1) if time_match else "Unknown"
+                
+                # 匹配版本號格式 X.X.X
+                version_match = re.search(r'build version :(\d+\.\d+\.\d+)', line)
+                version_str = version_match.group(1) if version_match else "Unknown"
+                
+                # 匹配版本時間格式 YYYYMMDDHHMMSS
+                version_time_match = re.search(r'(\d{12})', line)
+                version_time_str = version_time_match.group(1) if version_time_match else "Unknown"
+                
+                return {
+                    'time': time_str,
+                    'version': version_str,
+                    'version_time': version_time_str,
+                    'full_line': line.strip()
+                }
+        return {
+            'time': "Unknown",
+            'version': "Unknown", 
+            'version_time': "Unknown",
+            'full_line': "build version not found"
+        }
 
 
 class SearchWindow(QMainWindow):
@@ -156,7 +181,14 @@ class SearchWindow(QMainWindow):
         if self.ssh_client:
             self.ssh_client.close()
         
+        # 避免重新打開程式，直接關閉整個應用程式
+        import sys
+        if hasattr(self, 'login_window'):
+            self.login_window = None
+        
         event.accept()
+        # 關閉整個應用程式
+        sys.exit(0)
     
     def create_widgets(self):
         central_widget = QWidget()
@@ -186,6 +218,8 @@ class SearchWindow(QMainWindow):
         # 時間過濾區域
         time_filter_group = QGroupBox("Time Filter")
         time_filter_layout = QGridLayout()
+        time_filter_layout.setHorizontalSpacing(5)  # 減少水平間距
+        time_filter_layout.setVerticalSpacing(10)   # 設置垂直間距
         time_filter_group.setLayout(time_filter_layout)
         
         # 第一行：開始時間
@@ -198,23 +232,48 @@ class SearchWindow(QMainWindow):
         self.start_date_edit.setCalendarPopup(True)
         time_filter_layout.addWidget(self.start_date_edit, 0, 1)
         
-        self.start_hour_spin = QSpinBox()
-        self.start_hour_spin.setRange(0, 23)
-        self.start_hour_spin.setValue(0)
-        self.start_hour_spin.setSuffix("時")
-        time_filter_layout.addWidget(self.start_hour_spin, 0, 2)
+        # 時間控制元件容器
+        time_controls_layout = QHBoxLayout()
+        time_controls_layout.setSpacing(10)  # 設置緊密間距
         
-        self.start_minute_spin = QSpinBox()
-        self.start_minute_spin.setRange(0, 59)
-        self.start_minute_spin.setValue(0)
-        self.start_minute_spin.setSuffix("分")
-        time_filter_layout.addWidget(self.start_minute_spin, 0, 3)
+        self.start_hour_combo = QComboBox()
+        self.start_hour_combo.setEditable(True)
+        self.start_hour_combo.addItems([str(i).zfill(2) for i in range(24)])
+        self.start_hour_combo.setCurrentText("00")
+        self.start_hour_combo.setFixedWidth(50)
+        time_controls_layout.addWidget(self.start_hour_combo)
         
-        self.start_second_spin = QSpinBox()
-        self.start_second_spin.setRange(0, 59)
-        self.start_second_spin.setValue(0)
-        self.start_second_spin.setSuffix("秒")
-        time_filter_layout.addWidget(self.start_second_spin, 0, 4)
+        hour_label = QLabel("小時")
+        hour_label.setFixedWidth(35)
+        time_controls_layout.addWidget(hour_label)
+        
+        self.start_minute_combo = QComboBox()
+        self.start_minute_combo.setEditable(True)
+        self.start_minute_combo.addItems([str(i).zfill(2) for i in range(60)])
+        self.start_minute_combo.setCurrentText("00")
+        self.start_minute_combo.setFixedWidth(50)
+        time_controls_layout.addWidget(self.start_minute_combo)
+        
+        minute_label = QLabel("分鐘")
+        minute_label.setFixedWidth(35)
+        time_controls_layout.addWidget(minute_label)
+        
+        self.start_second_combo = QComboBox()
+        self.start_second_combo.setEditable(True)
+        self.start_second_combo.addItems([str(i).zfill(2) for i in range(60)])
+        self.start_second_combo.setCurrentText("00")
+        self.start_second_combo.setFixedWidth(50)
+        time_controls_layout.addWidget(self.start_second_combo)
+        
+        second_label = QLabel("秒鐘")
+        second_label.setFixedWidth(35)
+        time_controls_layout.addWidget(second_label)
+        
+        time_controls_layout.addStretch()  # 添加彈性空間
+        
+        time_controls_widget = QWidget()
+        time_controls_widget.setLayout(time_controls_layout)
+        time_filter_layout.addWidget(time_controls_widget, 0, 2, 1, 6)
         
         # 第二行：結束時間
         end_label = QLabel("End:")
@@ -226,23 +285,48 @@ class SearchWindow(QMainWindow):
         self.end_date_edit.setCalendarPopup(True)
         time_filter_layout.addWidget(self.end_date_edit, 1, 1)
         
-        self.end_hour_spin = QSpinBox()
-        self.end_hour_spin.setRange(0, 23)
-        self.end_hour_spin.setValue(23)
-        self.end_hour_spin.setSuffix("時")
-        time_filter_layout.addWidget(self.end_hour_spin, 1, 2)
+        # 結束時間控制元件容器
+        end_time_controls_layout = QHBoxLayout()
+        end_time_controls_layout.setSpacing(10)  # 設置緊密間距
         
-        self.end_minute_spin = QSpinBox()
-        self.end_minute_spin.setRange(0, 59)
-        self.end_minute_spin.setValue(59)
-        self.end_minute_spin.setSuffix("分")
-        time_filter_layout.addWidget(self.end_minute_spin, 1, 3)
+        self.end_hour_combo = QComboBox()
+        self.end_hour_combo.setEditable(True)
+        self.end_hour_combo.addItems([str(i).zfill(2) for i in range(24)])
+        self.end_hour_combo.setCurrentText("23")
+        self.end_hour_combo.setFixedWidth(50)
+        end_time_controls_layout.addWidget(self.end_hour_combo)
         
-        self.end_second_spin = QSpinBox()
-        self.end_second_spin.setRange(0, 59)
-        self.end_second_spin.setValue(59)
-        self.end_second_spin.setSuffix("秒")
-        time_filter_layout.addWidget(self.end_second_spin, 1, 4)
+        hour_label2 = QLabel("小時")
+        hour_label2.setFixedWidth(35)
+        end_time_controls_layout.addWidget(hour_label2)
+        
+        self.end_minute_combo = QComboBox()
+        self.end_minute_combo.setEditable(True)
+        self.end_minute_combo.addItems([str(i).zfill(2) for i in range(60)])
+        self.end_minute_combo.setCurrentText("59")
+        self.end_minute_combo.setFixedWidth(50)
+        end_time_controls_layout.addWidget(self.end_minute_combo)
+        
+        minute_label2 = QLabel("分鐘")
+        minute_label2.setFixedWidth(35)
+        end_time_controls_layout.addWidget(minute_label2)
+        
+        self.end_second_combo = QComboBox()
+        self.end_second_combo.setEditable(True)
+        self.end_second_combo.addItems([str(i).zfill(2) for i in range(60)])
+        self.end_second_combo.setCurrentText("59")
+        self.end_second_combo.setFixedWidth(50)
+        end_time_controls_layout.addWidget(self.end_second_combo)
+        
+        second_label2 = QLabel("秒鐘")
+        second_label2.setFixedWidth(35)
+        end_time_controls_layout.addWidget(second_label2)
+        
+        end_time_controls_layout.addStretch()  # 添加彈性空間
+        
+        end_time_controls_widget = QWidget()
+        end_time_controls_widget.setLayout(end_time_controls_layout)
+        time_filter_layout.addWidget(end_time_controls_widget, 1, 2, 1, 6)
         
         # 第三行：啟用時間過濾和快速設置按鈕
         self.enable_time_filter = QCheckBox("Enable Time Filter")
@@ -250,17 +334,24 @@ class SearchWindow(QMainWindow):
         self.enable_time_filter.toggled.connect(self.on_time_filter_toggled)
         time_filter_layout.addWidget(self.enable_time_filter, 2, 0, 1, 2)
         
+        # 快捷按鈕布局
+        button_container = QHBoxLayout()
+        
         self.last_hour_btn = QPushButton("Last Hour")
         self.last_hour_btn.clicked.connect(self.set_last_hour)
-        time_filter_layout.addWidget(self.last_hour_btn, 2, 2)
+        self.last_hour_btn.setFixedSize(100, 30)
+        button_container.addWidget(self.last_hour_btn)
         
         self.last_day_btn = QPushButton("Last 24 Hours")
         self.last_day_btn.clicked.connect(self.set_last_day)
-        time_filter_layout.addWidget(self.last_day_btn, 2, 3)
+        self.last_day_btn.setFixedSize(100, 30)
+        button_container.addWidget(self.last_day_btn)
         
-        self.reset_btn = QPushButton("Reset")
-        self.reset_btn.clicked.connect(self.reset_time_filter)
-        time_filter_layout.addWidget(self.reset_btn, 2, 4)
+        button_container.addStretch()
+        
+        button_widget = QWidget()
+        button_widget.setLayout(button_container)
+        time_filter_layout.addWidget(button_widget, 2, 2, 1, 6)
         
         main_layout.addWidget(time_filter_group)
         
@@ -288,11 +379,20 @@ class SearchWindow(QMainWindow):
         self.restart_count_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(self.restart_count_label)
         
-        # Build version log 顯示
+        # 單一大的顯示區域
+        main_display_group = QGroupBox("Build Version 信息")
+        main_display_layout = QVBoxLayout()
+        
+        # 單一內容顯示區域
         self.content_display = QTextEdit()
         self.content_display.setReadOnly(True)
-        self.content_display.setFont(QFont("Courier", 10))
-        main_layout.addWidget(self.content_display)
+        self.content_display.setFont(QFont("Consolas", 10))
+        self.content_display.setStyleSheet("border: 1px solid #ccc; background-color: white; padding: 10px;")
+        
+        main_display_layout.addWidget(self.content_display)
+        main_display_group.setLayout(main_display_layout)
+        
+        main_layout.addWidget(main_display_group)
         
         # 狀態標籤
         self.status_label = QLabel("Ready to scan log files")
@@ -338,17 +438,17 @@ class SearchWindow(QMainWindow):
         self.build_version_logs.clear()
         self.restart_count_label.setText("")
         if self.enable_time_filter.isChecked():
-            start_str = "{} {:02d}:{:02d}:{:02d}".format(
+            start_str = "{} {}:{}:{}".format(
                 self.start_date_edit.date().toString("yyyy-MM-dd"),
-                self.start_hour_spin.value(),
-                self.start_minute_spin.value(),
-                self.start_second_spin.value()
+                self.start_hour_combo.currentText(),
+                self.start_minute_combo.currentText(),
+                self.start_second_combo.currentText()
             )
-            end_str = "{} {:02d}:{:02d}:{:02d}".format(
+            end_str = "{} {}:{}:{}".format(
                 self.end_date_edit.date().toString("yyyy-MM-dd"),
-                self.end_hour_spin.value(),
-                self.end_minute_spin.value(),
-                self.end_second_spin.value()
+                self.end_hour_combo.currentText(),
+                self.end_minute_combo.currentText(),
+                self.end_second_combo.currentText()
             )
             self.status_label.setText("Scanning build version logs from {} to {}...".format(start_str, end_str))
         else:
@@ -365,9 +465,9 @@ class SearchWindow(QMainWindow):
             end_date = self.end_date_edit.date()
             
             start_time = datetime(start_date.year(), start_date.month(), start_date.day(),
-                                self.start_hour_spin.value(), self.start_minute_spin.value(), self.start_second_spin.value())
+                                int(self.start_hour_combo.currentText()), int(self.start_minute_combo.currentText()), int(self.start_second_combo.currentText()))
             end_time = datetime(end_date.year(), end_date.month(), end_date.day(),
-                              self.end_hour_spin.value(), self.end_minute_spin.value(), self.end_second_spin.value())
+                              int(self.end_hour_combo.currentText()), int(self.end_minute_combo.currentText()), int(self.end_second_combo.currentText()))
             
             # 驗證時間範圍
             if start_time > end_time:
@@ -385,14 +485,21 @@ class SearchWindow(QMainWindow):
         self.file_worker.finished.connect(self.on_scan_finished)
         self.file_worker.start()
     
-    def on_build_version_found(self, filename, content, build_version):
+    def on_build_version_found(self, filename, content, build_version_info):
         """當找到包含build version的檔案時的回調"""
         # 解析檔案時間
         file_datetime = parse_filename_datetime(filename)
-        time_str = file_datetime.strftime("%Y-%m-%d %H:%M:%S") if file_datetime else "Unknown time"
+        file_time_str = file_datetime.strftime("%Y-%m-%d %H:%M:%S") if file_datetime else "Unknown time"
         
         # 格式化日誌條目
-        log_entry = "=== {} ({}) ===\n{}\n\n".format(filename, time_str, build_version)
+        log_entry = {
+            'filename': filename,
+            'file_time': file_time_str,
+            'boot_time': build_version_info['time'],
+            'version': build_version_info['version'],
+            'version_time': build_version_info['version_time'],
+            'full_line': build_version_info['full_line']
+        }
         
         # 添加到日誌列表
         self.build_version_logs.append(log_entry)
@@ -403,17 +510,17 @@ class SearchWindow(QMainWindow):
     def on_restart_count(self, count):
         """更新重啟次數顯示"""
         if self.enable_time_filter.isChecked():
-            start_str = "{} {:02d}:{:02d}:{:02d}".format(
+            start_str = "{} {}:{}:{}".format(
                 self.start_date_edit.date().toString("yyyy-MM-dd"),
-                self.start_hour_spin.value(),
-                self.start_minute_spin.value(),
-                self.start_second_spin.value()
+                self.start_hour_combo.currentText(),
+                self.start_minute_combo.currentText(),
+                self.start_second_combo.currentText()
             )
-            end_str = "{} {:02d}:{:02d}:{:02d}".format(
+            end_str = "{} {}:{}:{}".format(
                 self.end_date_edit.date().toString("yyyy-MM-dd"),
-                self.end_hour_spin.value(),
-                self.end_minute_spin.value(),
-                self.end_second_spin.value()
+                self.end_hour_combo.currentText(),
+                self.end_minute_combo.currentText(),
+                self.end_second_combo.currentText()
             )
             self.restart_count_label.setText("在 {} 到 {} 總共重開 {} 次".format(start_str, end_str, count))
         else:
@@ -421,12 +528,22 @@ class SearchWindow(QMainWindow):
     
     def update_display(self):
         """更新顯示內容"""
-        # 按時間排序日誌
-        self.build_version_logs.sort()
+        # 按檔案時間排序日誌
+        self.build_version_logs.sort(key=lambda x: x['file_time'])
         
-        # 顯示所有build version日誌
-        all_logs = "".join(self.build_version_logs)
-        self.content_display.setText(all_logs)
+        # 準備顯示內容 - 每行顯示開機時間、版本號、版本時間
+        display_lines = []
+        
+        for log in self.build_version_logs:
+            line = "{}\t{}\t{}".format(
+                log['boot_time'],
+                log['version'], 
+                log['version_time']
+            )
+            display_lines.append(line)
+        
+        # 更新單一顯示區域
+        self.content_display.setText("\n".join(display_lines))
     
     def on_progress_update(self, current, total):
         """更新進度條"""
@@ -459,16 +576,15 @@ class SearchWindow(QMainWindow):
         """時間過濾開關狀態改變時的處理"""
         enabled = self.enable_time_filter.isChecked()
         self.start_date_edit.setEnabled(enabled)
-        self.start_hour_spin.setEnabled(enabled)
-        self.start_minute_spin.setEnabled(enabled)
-        self.start_second_spin.setEnabled(enabled)
+        self.start_hour_combo.setEnabled(enabled)
+        self.start_minute_combo.setEnabled(enabled)
+        self.start_second_combo.setEnabled(enabled)
         self.end_date_edit.setEnabled(enabled)
-        self.end_hour_spin.setEnabled(enabled)
-        self.end_minute_spin.setEnabled(enabled)
-        self.end_second_spin.setEnabled(enabled)
+        self.end_hour_combo.setEnabled(enabled)
+        self.end_minute_combo.setEnabled(enabled)
+        self.end_second_combo.setEnabled(enabled)
         self.last_hour_btn.setEnabled(enabled)
         self.last_day_btn.setEnabled(enabled)
-        self.reset_btn.setEnabled(enabled)
     
     def set_last_hour(self):
         """設置為最近一小時"""
@@ -479,15 +595,15 @@ class SearchWindow(QMainWindow):
         
         # 設置開始時間
         self.start_date_edit.setDate(QDate(start_time.year, start_time.month, start_time.day))
-        self.start_hour_spin.setValue(start_time.hour)
-        self.start_minute_spin.setValue(start_time.minute)
-        self.start_second_spin.setValue(start_time.second)
+        self.start_hour_combo.setCurrentText(str(start_time.hour).zfill(2))
+        self.start_minute_combo.setCurrentText(str(start_time.minute).zfill(2))
+        self.start_second_combo.setCurrentText(str(start_time.second).zfill(2))
         
         # 設置結束時間
         self.end_date_edit.setDate(QDate(current_time.year, current_time.month, current_time.day))
-        self.end_hour_spin.setValue(current_time.hour)
-        self.end_minute_spin.setValue(current_time.minute)
-        self.end_second_spin.setValue(current_time.second)
+        self.end_hour_combo.setCurrentText(str(current_time.hour).zfill(2))
+        self.end_minute_combo.setCurrentText(str(current_time.minute).zfill(2))
+        self.end_second_combo.setCurrentText(str(current_time.second).zfill(2))
     
     def set_last_day(self):
         """設置為最近24小時"""
@@ -498,31 +614,26 @@ class SearchWindow(QMainWindow):
         
         # 設置開始時間
         self.start_date_edit.setDate(QDate(start_time.year, start_time.month, start_time.day))
-        self.start_hour_spin.setValue(start_time.hour)
-        self.start_minute_spin.setValue(start_time.minute)
-        self.start_second_spin.setValue(start_time.second)
+        self.start_hour_combo.setCurrentText(str(start_time.hour).zfill(2))
+        self.start_minute_combo.setCurrentText(str(start_time.minute).zfill(2))
+        self.start_second_combo.setCurrentText(str(start_time.second).zfill(2))
         
         # 設置結束時間
         self.end_date_edit.setDate(QDate(current_time.year, current_time.month, current_time.day))
-        self.end_hour_spin.setValue(current_time.hour)
-        self.end_minute_spin.setValue(current_time.minute)
-        self.end_second_spin.setValue(current_time.second)
+        self.end_hour_combo.setCurrentText(str(current_time.hour).zfill(2))
+        self.end_minute_combo.setCurrentText(str(current_time.minute).zfill(2))
+        self.end_second_combo.setCurrentText(str(current_time.second).zfill(2))
     
-    def reset_time_filter(self):
-        """重置時間過濾為預設值"""
-        self.start_date_edit.setDate(QDate.currentDate().addDays(-1))
-        self.start_hour_spin.setValue(0)
-        self.start_minute_spin.setValue(0)
-        self.start_second_spin.setValue(0)
-        self.end_date_edit.setDate(QDate.currentDate())
-        self.end_hour_spin.setValue(23)
-        self.end_minute_spin.setValue(59)
-        self.end_second_spin.setValue(59)
     
     def back_to_login(self):
         """返回登入頁面"""
-        from .login import SSHConnectionApp
+        # 清理資源並關閉程式
+        if self.file_worker and self.file_worker.isRunning():
+            self.file_worker.terminate()
+            self.file_worker.wait(3000)
         
-        self.login_window = SSHConnectionApp()
-        self.login_window.show()
+        if self.ssh_client:
+            self.ssh_client.close()
+        
+        # 直接關閉窗口，不重新打開登入頁面
         self.close()
