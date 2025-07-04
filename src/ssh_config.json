@@ -1,0 +1,21 @@
+{
+    "last_connection": "root@192.168.1.45:22",
+    "connections": {
+        "root@192.168.1.45:22": {
+            "ip": "192.168.1.45",
+            "port": 22,
+            "username": "root",
+            "password": "",
+            "allow_no_password": true,
+            "timestamp": "2025-07-04 14:33:51"
+        },
+        "user@192.168.29.160:22": {
+            "ip": "192.168.29.160",
+            "port": 22,
+            "username": "user",
+            "password": "MjIwOTk0Nzg=",
+            "allow_no_password": false,
+            "timestamp": "2025-07-04 13:30:04"
+        }
+    }
+}
